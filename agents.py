@@ -1,6 +1,7 @@
 import os
 from groq import Groq
 from dotenv import load_dotenv
+
 load_dotenv()
 
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
@@ -41,4 +42,6 @@ def ceo_agent(question):
     """
     return combined
 
-print(ceo_agent("We need to hire a Product Manager. What should we consider?"))
+
+if __name__ == "__main__":
+    print(ceo_agent("We need to hire a Product Manager. What should we consider?"))
