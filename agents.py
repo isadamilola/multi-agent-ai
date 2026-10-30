@@ -47,13 +47,24 @@ CEO_SCHEMA = {
     },
 }
 
+def apply_salary_guard(decision, expected, budget):
+    check = salary_fit(expected, budget)
+    decision["salary_check"] = check
+    if not check.get("within_budget", True) and decision["recommendation"] == "Hire":
+        decision["recommendation"] = "Conditional Hire"
+        decision["guard_note"] = "Downgraded: expected salary is above budget."
+    return decision
+
 def ceo_decision(question, candidate_info, cfo, cmo, recruiter, expected=None, budget=None):
     prompt = f"""You are the CEO making the final hiring decision.
 Candidate: {candidate_info}
 CFO: {cfo}
 CMO: {cmo}
 Recruiter: {recruiter}
-Do not blindly agree with the agents. Note where they disagree."""
+Do not blindly agree with the agents. Note where they disagree.
+Use only facts stated in the candidate info or the agent reports.
+If something is not stated, put it under key_concerns as unknown.
+Do not invent resume details."""
     resp = groq_client.chat.completions.create(
         model=TOOL_MODEL,
         messages=[{"role": "system", "content": prompt},
@@ -62,14 +73,9 @@ Do not blindly agree with the agents. Note where they disagree."""
     )
     decision = json.loads(resp.choices[0].message.content)
 
-    if expected and budget:
-        check = salary_fit(expected, budget)
-        decision["salary_check"] = check
-        if not check["within_budget"] and decision["recommendation"] == "Hire":
-            decision["recommendation"] = "Conditional Hire"
-            decision["guard_note"] = "Downgraded: expected salary is above budget."
+    if expected is not None and budget is not None:
+        decision = apply_salary_guard(decision, expected, budget)
     return decision
-
 
 def cfo_agent_with_tools(
     question, candidate_info, expected=None, budget=None

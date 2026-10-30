@@ -1,111 +1,102 @@
 # Multi-Agent AI Hiring System
 
-A multi-agent AI system that simulates a business leadership team evaluating hiring decisions.
+A Flask API where a CFO, a CMO and a Recruiter agent each assess a candidate, and a CEO agent returns a structured hiring decision. The CFO uses tool calling for the salary check, and a rule in code stops the final verdict from contradicting it.
 
-The system uses multiple specialized AI agents to analyze a candidate from different business perspectives before a CEO agent produces a final recommendation.
+## How it works
 
-# Features
+```
+Request (question, candidate_info, role_budget)
+        |
+   Flask API  (validates input)
+        |
+   ceo_agent
+   |-- CFO agent        Groq, calls the salary_fit tool
+   |-- CMO agent        OpenRouter
+   '-- Recruiter agent  OpenRouter
+        |
+   CEO decision         Groq, output constrained by a JSON schema
+        |
+   Salary guard         plain Python rule
+        |
+   JSON response
+```
 
-- CFO Agent — evaluates financial implications, salary, business value, ROI, and financial risks.
-- CMO Agent — evaluates marketing value, market knowledge, positioning, and customer considerations.
-- Recruiter Agent — evaluates experience, skills, team fit, leadership, and hiring risks.
-- CEO Agent — orchestrates the specialist agents and produces the final hiring recommendation.
-- Flask REST API — exposes the AI system through an API endpoint.
+## Features
 
-# Architecture
+- **Tool calling.** The CFO calls a `salary_fit` function instead of doing the arithmetic in text. The application overrides the model's arguments with its own validated values, because models can invent tool arguments (in testing, the model once passed `budget=0` and the function crashed).
+- **Structured output.** The CEO returns JSON constrained by a schema. `recommendation` can only be `Hire`, `Conditional Hire` or `Do Not Hire`.
+- **Salary guard.** If the CEO says `Hire` but the expected salary is above budget, the code downgrades it to `Conditional Hire` and adds a `guard_note`.
+- **Input validation.** Bad or missing input returns a 400 with a clear message.
 
-User
-↓
-Flask REST API
-↓
-CEO Orchestrator
-↓
-┌────────────┬────────────┬────────────┐
-↓ ↓ ↓
-CFO CMO Recruiter
-↓ ↓ ↓
-└────────────┴────────────┘
-↓
-CEO Final Decision
-↓
-JSON
+## Tech stack
 
-# Tech Stack
+Python, Flask, OpenAI-compatible SDK (Groq and OpenRouter endpoints), python-dotenv, pytest
 
-- Python
-- Flask
-- OpenRouter API
-- LLM-based multi-agent architecture
-- python-dotenv
+## Setup
 
-# Project Structure
-
-multi-agent-ai/
-│
-├── agents.py
-├── app.py
-├── requirements.txt
-├── README.md
-└── .gitignore
-
-# Setup
-
-Clone the repository and install the dependencies:
-
+```
 pip install -r requirements.txt
+```
 
-Create a ".env" file in the project directory:
+Create a `.env` file:
 
-OPENROUTER_API_KEY=your_api_key
+```
+GROQ_API_KEY=your_groq_key
+OPENROUTER_API_KEY=your_openrouter_key
+```
 
-Run the application:
+Run:
 
+```
 python app.py
+```
 
-API
+## API
 
-POST "/ceo"
+`POST /ceo`
 
-The endpoint accepts a hiring question and structured candidate information.
+Request:
 
-# Example Request
-
+```json
 {
-"question": "Should we hire this candidate?",
-"candidate_info": {
-"name": "Jane Doe",
-"experience": "5 years of product management",
-"skills": [
-"Product strategy",
-"User research",
-"Analytics"
-],
-"achievements": "Increased product retention by 18%",
-"salary_expectation": 90000,
-"market_experience": "Limited experience in our target market"
+  "question": "Should we hire this Product Manager?",
+  "candidate_info": {
+    "name": "Jane",
+    "experience": "5 years SaaS",
+    "skills": ["Product strategy", "Analytics"],
+    "achievements": ["Improved product adoption"],
+    "salary_expectation": 120000,
+    "market_experience": "SaaS"
+  },
+  "role_budget": 100000
 }
+```
+
+Response:
+
+```json
+{
+  "recommendation": "Conditional Hire",
+  "key_strengths": ["5 years of SaaS experience", "Improved product adoption"],
+  "key_concerns": ["Expected salary exceeds the budget by 20%"],
+  "reasoning": "Strong SaaS background, but the salary gap needs negotiation.",
+  "salary_check": { "within_budget": false, "gap": 20000, "gap_percent": 20.0 }
 }
+```
 
-The candidate information is analyzed independently by the CFO, CMO, and Recruiter agents.
+`salary_expectation` and `role_budget` are required whole numbers. Missing or invalid input returns a 400.
 
-The CEO agent then combines their assessments and produces a final recommendation:
+## Tests
 
-- "Hire"
-- "Conditional Hire"
-- "Do Not Hire"
+```
+python -m pytest
+```
 
-# Purpose
+Covers the salary guard (`test_guard.py`), which runs without any API call.
 
-This project demonstrates practical implementation of:
+## Limitations
 
-- Multi-agent AI systems
-- LLM orchestration
-- Role-based AI agents
-- Structured candidate evaluation
-- REST API development with Flask
-- Integration with hosted LLM APIs
-- Combining multiple AI perspectives into a final decision
-
-# Note
-
-The project uses OpenRouter's API to access available AI models. An API key is required to run the application.
+- The CMO and Recruiter use OpenRouter's free router, so the model behind them can change between runs.
+- Agents run one after another, so a request takes several seconds.
+- The CEO is instructed to flag missing information rather than invent candidate details, but LLM-generated evaluations can still contain errors and require human review.
+- No authentication or rate limiting, so it isn't production-ready.
