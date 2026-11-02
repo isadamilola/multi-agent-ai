@@ -27,10 +27,11 @@ Request (question, candidate_info, role_budget)
 - **Structured output.** The CEO returns JSON constrained by a schema. `recommendation` can only be `Hire`, `Conditional Hire` or `Do Not Hire`.
 - **Salary guard.** If the CEO says `Hire` but the expected salary is above budget, the code downgrades it to `Conditional Hire` and adds a `guard_note`.
 - **Input validation.** Bad or missing input returns a 400 with a clear message.
+- **Docker support.** The API runs in a container, with API keys passed in at run time.
 
 ## Tech stack
 
-Python, Flask, OpenAI-compatible SDK (Groq and OpenRouter endpoints), python-dotenv, pytest
+Python, Flask, OpenAI-compatible SDK (Groq and OpenRouter endpoints), python-dotenv, pytest, Docker
 
 ## Setup
 
@@ -50,6 +51,17 @@ Run:
 ```
 python app.py
 ```
+
+## Run with Docker
+
+Create the `.env` file described above, then:
+
+```
+docker build -t multi-agent-ai .
+docker run -p 5000:5000 --env-file .env multi-agent-ai
+```
+
+The API is then available at `http://localhost:5000/ceo`. API keys are passed in at run time and are never baked into the image.
 
 ## API
 
@@ -89,6 +101,7 @@ Response:
 ## Tests
 
 ```
+pip install -r requirements-dev.txt
 python -m pytest
 ```
 
@@ -99,4 +112,4 @@ Covers the salary guard (`test_guard.py`), which runs without any API call.
 - The CMO and Recruiter use OpenRouter's free router, so the model behind them can change between runs.
 - Agents run one after another, so a request takes several seconds.
 - The CEO is instructed to flag missing information rather than invent candidate details, but LLM-generated evaluations can still contain errors and require human review.
-- No authentication or rate limiting, so it isn't production-ready.
+- No authentication or rate limiting, and the container runs Flask's development server, so it isn't production-ready.
